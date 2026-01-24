@@ -853,6 +853,110 @@ function EmployeeAttendance() {
         </div>
       )} */}
 
+      {/* Employee Time In/Out Status - Only for non-admin users */}
+      {!isAdmin && (
+        <div className="bg-blue-gray-200/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-lg shadow-md mb-6 border border-white/20 dark:border-gray-700/50">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+              Employee Time In/Out Status
+            </h3>
+          </div>
+
+          <div className="overflow-x-auto">
+            {loading ? (
+              <div className="text-center py-8">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <p className="text-gray-500 dark:text-gray-400 mt-2">Loading attendance records...</p>
+              </div>
+            ) : filteredRecords.filter(record => (record.time_in || record.time_out) && !hasWorked7Hours(record)).length > 0 ? (
+              <table className="min-w-full">
+                <thead className="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Check In
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Check Out
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Hours
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
+                  {filteredRecords.filter(record => (record.time_in || record.time_out) && !hasWorked7Hours(record)).map((record, index) => (
+                    <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        {record.date ? new Date(record.date).toLocaleDateString() : '--'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {record.time_in ? (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-gray-900 dark:text-white">
+                              {formatTime(record.time_in)}
+                            </span>
+                            <span className="px-2 py-1 text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-full">
+                              In
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-500">--</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {(record.checkout_time || record.time_out) ? (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-gray-900 dark:text-white">
+                              {formatTime(record.checkout_time || record.time_out)}
+                            </span>
+                            <span className="px-2 py-1 text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 rounded-full">
+                              Out
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-500">--</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <span className="font-medium text-blue-600 dark:text-blue-400">
+                          {record.time_in && (record.checkout_time || record.time_out) ? 
+                            `${((new Date(record.checkout_time || record.time_out) - new Date(record.time_in)) / (1000 * 60 * 60)).toFixed(1)}h` : 
+                            "--"
+                          }
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {record.time_in ? (
+                          <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full">
+                            In Progress
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200 rounded-full">
+                            Absent
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-gray-500 dark:text-gray-400">
+                  No check-in/out records found.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Google Sheets Attendance Data */}
       {isAdmin && (
         <div className="bg-blue-gray-200/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-lg shadow-md mb-6 border border-white/20 dark:border-gray-700/50">
