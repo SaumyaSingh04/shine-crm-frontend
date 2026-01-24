@@ -220,24 +220,47 @@ function EmployeeAttendance() {
     setLoading(true);
     try {
       if (isAdmin) {
-        // For admin: load both attendance and employees
-        const [attendanceResponse, employeeResponse] = await Promise.all([
-          api.get('/api/attendance'),
-          api.get('/api/employees'),
-        ]);
-
-        const attendanceData = attendanceResponse.data;
-        const records = attendanceData.data || attendanceData || [];
-
-        const employeeData = employeeResponse.data;
-        const employeeList = employeeData.data || employeeData || [];
-
-        const recordsWithNames = records.map((record) => ({
-          ...record,
-          employee_name: record.employee_id?.name || "Unknown",
-        }));
-
-        setAttendanceRecords(recordsWithNames);
+        // For admin: load RFID attendance data for today
+        const today = new Date().toISOString().split('T')[0];
+        const rfidRecords = [];
+        
+        try {
+          const response = await fetch(`${import.meta.env.VITE_ATTENDANCE_API_URL}?date=${today}`);
+          const data = await response.json();
+          
+          if (data.data && data.data.length > 0) {
+            data.data.forEach(emp => {
+              const checkInTimes = [];
+              const checkOutTimes = [];
+              
+              for (let j = 1; j <= 10; j++) {
+                const checkIn = emp[`Check-in ${j}`];
+                const checkOut = emp[`Check-out ${j}`];
+                
+                if (checkIn && checkIn !== '-' && checkIn !== '') {
+                  checkInTimes.push(checkIn);
+                }
+                if (checkOut && checkOut !== '-' && checkOut !== '') {
+                  checkOutTimes.push(checkOut);
+                }
+              }
+              
+              if (checkInTimes.length > 0) {
+                rfidRecords.push({
+                  date: new Date(today),
+                  time_in: checkInTimes[0],
+                  time_out: checkOutTimes[checkOutTimes.length - 1] || null,
+                  employee_name: emp.Name,
+                  source: 'rfid'
+                });
+              }
+            });
+          }
+        } catch (rfidError) {
+          console.error('Error loading RFID data:', rfidError);
+        }
+        
+        setAttendanceRecords(rfidRecords);
       } else {
         // For employee: load RFID attendance data
         const today = new Date();
@@ -529,7 +552,20 @@ function EmployeeAttendance() {
   const hasWorked7Hours = (record) => {
     if (!record.time_in) return false;
     const endTime = record.checkout_time || record.time_out;
-    if (!endTime) return false; // If no checkout time, it's not a completed 7+ hour session
+    if (!endTime) return false;
+    
+    // Handle RFID time format
+    if (record.source === 'rfid') {
+      try {
+        const checkInTime = new Date(record.time_in);
+        const checkOutTime = new Date(endTime);
+        const hours = (checkOutTime - checkInTime) / (1000 * 60 * 60);
+        return hours >= 7;
+      } catch (e) {
+        return false;
+      }
+    }
+    
     return getWorkingHoursNumber(record) >= 7;
   };
 
@@ -817,160 +853,6 @@ function EmployeeAttendance() {
         </div>
       )} */}
 
-      {/* Employee Time In/Out Status */}
-      <div className="bg-blue-gray-200/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-lg shadow-md mb-6 border border-white/20 dark:border-gray-700/50">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-            Employee Time In/Out Status
-          </h3>
-        </div>
-
-        <div className="overflow-x-auto">
-          {loading ? (
-            <div className="text-center py-8">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <p className="text-gray-500 dark:text-gray-400 mt-2">Loading attendance records...</p>
-            </div>
-          ) : filteredRecords.filter(record => (record.time_in || record.time_out) && !hasWorked7Hours(record)).length > 0 ? (
-            <table className="min-w-full">
-              <thead className="bg-gray-50 dark:bg-gray-700">
-                <tr>
-                  {isAdmin && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                      Employee
-                    </th>
-                  )}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Check In
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Check Out
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Hours
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
-                {filteredRecords.filter(record => (record.time_in || record.time_out) && !hasWorked7Hours(record)).map((record, index) => (
-                  <tr
-                    key={index}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-700"
-                  >
-                    {isAdmin && (
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                        {record.employee_id?.name || record.employee_name || "Unknown"}
-                      </td>
-                    )}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      {record.date ? new Date(record.date).toLocaleDateString() : '--'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {record.time_in ? (
-                        <div className="flex items-center space-x-2">
-                          <span className="text-gray-900 dark:text-white">
-                            {formatTime(record.time_in)}
-                          </span>
-                          <span className="px-2 py-1 text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-full">
-                            In
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-gray-500">--</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {(record.checkout_time || record.time_out) ? (
-                        <div className="flex items-center space-x-2">
-                          <span className="text-gray-900 dark:text-white">
-                            {formatTime(record.checkout_time || record.time_out)}
-                          </span>
-                          <span className="px-2 py-1 text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 rounded-full">
-                            Out
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-gray-500">--</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className="font-medium text-blue-600 dark:text-blue-400">
-                        {record.time_in && (record.checkout_time || record.time_out) ? 
-                          `${((new Date(record.checkout_time || record.time_out) - new Date(record.time_in)) / (1000 * 60 * 60)).toFixed(1)}h` : 
-                          "--"
-                        }
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {(record.checkout_time || record.time_out) ? (
-                        <span className={`px-2 py-1 text-xs rounded-full ${
-                          record.is_manual_checkout 
-                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
-                            : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                        }`}>
-                          {record.is_manual_checkout ? 'Manual' : 'Auto'}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400">--</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {(record.checkout_time || record.time_out) ? (
-                        (() => {
-                          const hours = getWorkingHoursNumber(record);
-                          if (hours >= 8) {
-                            return (
-                              <span className="px-2 py-1 text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-full">
-                                Full Day
-                              </span>
-                            );
-                          } else if (hours >= 4) {
-                            return (
-                              <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 rounded-full">
-                                Half Day
-                              </span>
-                            );
-                          } else {
-                            return (
-                              <span className="px-2 py-1 text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 rounded-full">
-                                Short Day
-                              </span>
-                            );
-                          }
-                        })()
-                      ) : record.time_in ? (
-                        <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full">
-                          In Progress
-                        </span>
-                      ) : (
-                        <span className="px-2 py-1 text-xs bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200 rounded-full">
-                          Absent
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-gray-500 dark:text-gray-400">
-                No check-in/out records found.
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Google Sheets Attendance Data */}
       {isAdmin && (
         <div className="bg-blue-gray-200/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-lg shadow-md mb-6 border border-white/20 dark:border-gray-700/50">
@@ -1171,11 +1053,13 @@ function EmployeeAttendance() {
                 className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-900 dark:text-white text-sm"
               >
                 <option value="">Choose Employee</option>
-                {googleSheetsData.map((employee, index) => (
+                {googleSheetsData.length > 0 ? googleSheetsData.map((employee, index) => (
                   <option key={index} value={employee.Name}>
                     {employee.Name}
                   </option>
-                ))}
+                )) : (
+                  <option disabled>Loading employees...</option>
+                )}
               </select>
               
               {selectedCalendarEmployee && (
